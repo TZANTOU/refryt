@@ -34,6 +34,9 @@ env:
   # Inno Setup 6 compiles the Windows setup .exe, under Wine, as scripts/build-windows.sh does.
   INNO_SETUP_URL: https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe
   INNO_SETUP_SHA256: 9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732
+  # flatpak-builder 1.4.12, built from source for the Flatpak job (see there).
+  FLATPAK_BUILDER_URL: https://github.com/flatpak/flatpak-builder/releases/download/1.4.12/flatpak-builder-1.4.12.tar.xz
+  FLATPAK_BUILDER_SHA256: 8d5b791f7a8449d6a8ebcff0c8d6abd5335113f56703bf5777ee4c7db4bda378
 
 jobs:
   # Fast failures first: a wrong version, a tag that is not on main, or unwritten notes would
@@ -145,19 +148,32 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      # The builder is Flathub's own app, not Ubuntu's package: build-flatpak.sh uses it when no
-      # flatpak-builder is installed, and Ubuntu's is old enough to install the tray library into
-      # lib64 where the next module cannot find it (the build here, with 1.4.12, uses lib).
-      - name: Install Flatpak and its builder
+      # flatpak-builder is built from its release, not taken from Ubuntu: Ubuntu 24.04's 1.4.2
+      # does not pass CMAKE_INSTALL_LIBDIR=lib to cmake modules (1.4.3 and later do), so the tray
+      # library installed into lib64 and the next module could not find it. This is the version
+      # the Flatpak is built with by hand.
+      - name: Install Flatpak and build flatpak-builder
         run: |
+          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends flatpak curl git
+          sudo apt-get install -y --no-install-recommends flatpak elfutils debugedit appstream \
+            curl git meson ninja-build xz-utils patch
+          sudo apt-get build-dep -y flatpak-builder
+          curl -fsSL -o flatpak-builder.tar.xz "$FLATPAK_BUILDER_URL"
+          echo "$FLATPAK_BUILDER_SHA256  flatpak-builder.tar.xz" | sha256sum -c -
+          tar -xJf flatpak-builder.tar.xz
+          (cd flatpak-builder-* && meson setup _build --prefix=/usr/local -Ddocs=disabled -Dtests=false \
+            && ninja -C _build && sudo ninja -C _build install)
+          rm -rf flatpak-builder.tar.xz flatpak-builder-*
+          flatpak-builder --version
+      - name: Install the runtimes
+        run: |
           # Ubuntu's AppArmor stops bubblewrap, which the builder runs every module in, from
           # making a user namespace.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y flathub \
-            org.flatpak.Builder org.gnome.Platform//49 org.gnome.Sdk//49 \
+            org.gnome.Platform//49 org.gnome.Sdk//49 \
             org.freedesktop.Sdk.Extension.rust-stable//25.08
       - uses: actions/cache@v4
         with:
