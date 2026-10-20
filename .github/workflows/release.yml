@@ -98,8 +98,23 @@ jobs:
           Xvfb :99 -screen 0 1024x768x24 &
           echo "DISPLAY=:99" >> "$GITHUB_ENV"
           sleep 2
-          DISPLAY=:99 WINEDEBUG=-all wine innosetup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
-          test -f "$HOME/.wine/drive_c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          DISPLAY=:99 wine innosetup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+          # This installer puts Inno Setup in "Program Files" when the prefix is 64-bit; the
+          # script looks under "Program Files (x86)", where older installers put it. Find it
+          # and link it to where the script looks.
+          iscc="$(find "$HOME/.wine/drive_c" -iname ISCC.exe | head -1)"
+          if [ -z "$iscc" ]; then
+            echo "::error::Inno Setup did not install; the Wine prefix holds:"
+            find "$HOME/.wine/drive_c" -maxdepth 3 -type d | head -40
+            exit 1
+          fi
+          echo "ISCC is at $iscc"
+          want="$HOME/.wine/drive_c/Program Files (x86)/Inno Setup 6"
+          if [ ! -f "$want/ISCC.exe" ]; then
+            mkdir -p "$(dirname "$want")"
+            ln -sfn "$(dirname "$iscc")" "$want"
+          fi
+          test -f "$want/ISCC.exe"
           rm innosetup.exe
       - uses: Swatinem/rust-cache@v2
         with:
@@ -133,7 +148,7 @@ jobs:
       - name: Install Flatpak and its builder
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder curl git
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder elfutils curl git
           # Ubuntu's AppArmor stops bubblewrap, which the builder runs every module in, from
           # making a user namespace.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
