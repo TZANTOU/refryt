@@ -145,16 +145,19 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      # The builder is Flathub's own app, not Ubuntu's package: build-flatpak.sh uses it when no
+      # flatpak-builder is installed, and Ubuntu's is old enough to install the tray library into
+      # lib64 where the next module cannot find it (the build here, with 1.4.12, uses lib).
       - name: Install Flatpak and its builder
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder elfutils curl git
+          sudo apt-get install -y --no-install-recommends flatpak curl git
           # Ubuntu's AppArmor stops bubblewrap, which the builder runs every module in, from
           # making a user namespace.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y flathub \
-            org.gnome.Platform//49 org.gnome.Sdk//49 \
+            org.flatpak.Builder org.gnome.Platform//49 org.gnome.Sdk//49 \
             org.freedesktop.Sdk.Extension.rust-stable//25.08
       - uses: actions/cache@v4
         with:
