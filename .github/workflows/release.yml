@@ -77,7 +77,7 @@ jobs:
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake pkg-config curl zip unzip p7zip-full msitools \
+            build-essential cmake pkg-config curl zip unzip p7zip-full msitools wixl \
             mingw-w64 wine wine32:i386 xvfb \
             libmpv-dev libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev \
             libayatana-appindicator3-dev libxdo-dev libxkbcommon-dev libwayland-dev \
