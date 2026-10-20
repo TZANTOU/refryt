@@ -101,11 +101,21 @@ jobs:
           Xvfb :99 -screen 0 1024x768x24 &
           echo "DISPLAY=:99" >> "$GITHUB_ENV"
           sleep 2
-          DISPLAY=:99 wine innosetup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
-          # This installer puts Inno Setup in "Program Files" when the prefix is 64-bit; the
-          # script looks under "Program Files (x86)", where older installers put it. Find it
-          # and link it to where the script looks.
-          iscc="$(find "$HOME/.wine/drive_c" -iname ISCC.exe | head -1)"
+          # Wine's first start is flaky (the installer has exited non-zero on a run that
+          # worked the time before), and its exit code says little: try again, and judge by
+          # whether the compiler is there.
+          iscc=""
+          for attempt in 1 2 3; do
+            DISPLAY=:99 wine innosetup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART || true
+            # This installer puts Inno Setup in "Program Files" when the prefix is 64-bit; the
+            # script looks under "Program Files (x86)", where older installers put it. Find it
+            # and link it to where the script looks.
+            iscc="$(find "$HOME/.wine/drive_c" -iname ISCC.exe | head -1)"
+            [ -n "$iscc" ] && break
+            echo "attempt $attempt: no ISCC.exe yet"
+            wineserver -k || true
+            sleep 5
+          done
           if [ -z "$iscc" ]; then
             echo "::error::Inno Setup did not install; the Wine prefix holds:"
             find "$HOME/.wine/drive_c" -maxdepth 3 -type d | head -40
